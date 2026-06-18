@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TREC UserSim Conversation Browser</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --sidebar-bg: #1a1f2e;
+    --sidebar-text: #c8cdd8;
+    --sidebar-heading: #ffffff;
+    --sidebar-muted: #6b7280;
+    --sidebar-accent: #3dd68c;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --user-bubble: #1a1f2e;
+    --user-text: #ffffff;
+    --agent-bubble: #ffffff;
+    --agent-text: #1a1f2e;
+    --border: #e5e7eb;
+    --muted: #6b7280;
+    --tape: #e0f2f1;
+    --tape-dot: #2563eb;
+    --nav-bg: #ffffff;
+    --nav-border: #e5e7eb;
+    --font: 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--agent-text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* NAV BAR */
+  #nav {
+    background: var(--nav-bg);
+    border-bottom: 1px solid var(--nav-border);
+    padding: 0 20px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  #nav h1 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    letter-spacing: 0.01em;
+    margin-right: auto;
+  }
+
+  #nav .counter {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .nav-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: #374151;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-btn:hover { background: #eee; border-color: #d1d5db; }
+  .nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  #file-label {
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #file-label:hover { background: #1d4ed8; }
+  #file-input { display: none; }
+
+  #path-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    max-width: 420px;
+  }
+
+  #path-input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: #111;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #path-input:focus { border-color: var(--accent); }
+  #path-input::placeholder { color: #9ca3af; font-family: var(--mono); }
+
+  #path-load-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: #374151;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  #path-load-btn:hover { background: #eee; }
+
+  #load-status {
+    font-size: 11px;
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  #load-status.ok { color: #16a34a; }
+  #load-status.err { color: #dc2626; }
+
+  /* MAIN LAYOUT */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* CHAT AREA */
+  #chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 0;
+  }
+
+  #chat-inner {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 40px 0 52px;
+    position: relative;
+  }
+
+  /* Timeline tape */
+  #chat-inner::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, var(--border) 5%, var(--border) 95%, transparent);
+  }
+
+  /* UTTERANCE */
+  .utterance {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 28px;
+    position: relative;
+  }
+
+  .utterance::before {
+    content: '';
+    position: absolute;
+    left: -27px;
+    top: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tape-dot);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--tape-dot);
+  }
+
+  .utterance.user-msg::before {
+    background: var(--user-bubble);
+    box-shadow: 0 0 0 1px var(--user-bubble);
+  }
+
+  .msg-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .participant-tag {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .utterance.user-msg .participant-tag { color: var(--accent); }
+
+  .timestamp {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .bubble {
+    background: var(--agent-bubble);
+    border: 1px solid var(--border);
+    border-radius: 0 12px 12px 12px;
+    padding: 14px 18px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--agent-text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .utterance.user-msg .bubble {
+    background: var(--user-bubble);
+    color: var(--user-text);
+    border-color: transparent;
+    border-radius: 12px 12px 12px 0;
+  }
+
+  /* Markdown inside bubbles */
+  .bubble h1, .bubble h2, .bubble h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+  }
+  .bubble h1:first-child, .bubble h2:first-child, .bubble h3:first-child { margin-top: 0; }
+  .bubble p { margin-bottom: 8px; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .bubble ul, .bubble ol { padding-left: 20px; margin-bottom: 8px; }
+  .bubble li { margin-bottom: 4px; }
+  .bubble strong { font-weight: 600; }
+  .bubble em { font-style: italic; }
+  .bubble code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: rgba(0,0,0,0.07);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .utterance.user-msg .bubble code { background: rgba(255,255,255,0.15); }
+  .bubble pre { background: rgba(0,0,0,0.07); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin-bottom: 8px; }
+  .bubble pre code { background: none; padding: 0; }
+  .bubble hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+  /* Sources & Annotations */
+  .meta-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .pill {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 3px 9px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--bg);
+  }
+
+  .pill.annotation {
+    background: #fef3c7;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+  .pill.annotation.helpful { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+  .pill.source { background: var(--accent-light); border-color: #bfdbfe; color: #1e40af; }
+
+  /* EMPTY STATE */
+  #empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    color: var(--muted);
+  }
+  #empty-state svg { opacity: 0.3; }
+  #empty-state p { font-size: 14px; text-align: center; max-width: 280px; line-height: 1.5; }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: 320px;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+
+  #sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  #sidebar-scroll::-webkit-scrollbar { width: 4px; }
+  #sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  #sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  .sidebar-section {
+    margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .sidebar-toggle {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: none;
+    color: var(--sidebar-heading);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 11px 14px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .sidebar-toggle:hover { background: rgba(255,255,255,0.07); }
+
+  .toggle-arrow {
+    transition: transform 0.2s;
+    font-size: 10px;
+    opacity: 0.5;
+  }
+  .sidebar-section.open .toggle-arrow { transform: rotate(180deg); }
+
+  .sidebar-body {
+    display: none;
+    padding: 12px 14px 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .sidebar-section.open .sidebar-body { display: block; }
+
+  .meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 10px;
+  }
+  .meta-row:last-child { margin-bottom: 0; }
+  .meta-label {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--sidebar-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .meta-value {
+    font-size: 13px;
+    color: var(--sidebar-text);
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .meta-value.mono {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sidebar-accent);
+  }
+  .meta-value.tag {
+    display: inline-block;
+    background: rgba(61,214,140,0.12);
+    color: var(--sidebar-accent);
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* Survey pills */
+  .survey-pill {
+    font-size: 11px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: var(--sidebar-text);
+    margin-bottom: 4px;
+    display: inline-block;
+    line-height: 1.4;
+  }
+
+  /* Scrollbar for chat */
+  #chat-scroll::-webkit-scrollbar { width: 4px; }
+  #chat-scroll::-webkit-scrollbar-track { background: transparent; }
+  #chat-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <h1>TREC UserSim Conversation Browser</h1>
+  <span id="load-status"></span>
+  <span class="counter" id="counter">No file loaded</span>
+  <button class="nav-btn" id="btn-prev" disabled>← Prev</button>
+  <button class="nav-btn" id="btn-next" disabled>Next →</button>
+  <label id="file-label" for="file-input">Load file</label>
+  <input type="file" id="file-input" accept=".jsonl,.json">
+</nav>
+
+<div id="main">
+  <div id="chat-container">
+    <div id="chat-scroll">
+      <div id="chat-inner">
+        <div id="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>Load a JSONL file to start browsing conversations</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div id="sidebar-scroll">
+      <div id="sidebar-placeholder" style="color:#6b7280;font-size:13px;padding:12px 4px;">Load a file to see metadata.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let records = [];
+let current = 0;
+
+// ── Load records ───────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('./records.jsonl'); 
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    parseAndLoad(text);
+  } catch (err) {
+    console.error('Failed to load JSONL:', err);
+  }
+});
+
+// ── Path / URL Loading ────────────────────────────────────────────────────
+function setStatus(msg, type) {
+  const el = document.getElementById('load-status');
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+async function loadFromUrl(url) {
+  setStatus('Loading…', '');
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    parseAndLoad(text);
+    setStatus('✓ Loaded', 'ok');
+  } catch (err) {
+    setStatus(`✗ ${err.message}`, 'err');
+  }
+}
+
+function parseAndLoad(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  if (parsed.length === 0) throw new Error('No valid records');
+  records = parsed;
+  current = 0;
+  render();
+}
+
+// ── File Input (Load button) ─────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('Reading…', '');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      parseAndLoad(ev.target.result);
+      setStatus('✓ Loaded', 'ok');
+    } catch (err) {
+      setStatus(`✗ ${err.message}`, 'err');
+    }
+  };
+  reader.readAsText(file);
+});
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+document.getElementById('btn-prev').addEventListener('click', () => { if (current > 0) { current--; render(); } });
+document.getElementById('btn-next').addEventListener('click', () => { if (current < records.length - 1) { current++; render(); } });
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function render() {
+  const rec = records[current];
+  // Nav state
+  document.getElementById('counter').textContent = `${current + 1} / ${records.length}`;
+  document.getElementById('btn-prev').disabled = current === 0;
+  document.getElementById('btn-next').disabled = current === records.length - 1;
+
+  renderChat(rec);
+  renderSidebar(rec);
+  document.getElementById('chat-scroll').scrollTop = 0;
+}
+
+// ── Minimal Markdown Parser ────────────────────────────────────────────────
+function renderMarkdown(text) {
+  // Escape HTML first
+  let html = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Code blocks
+  html = html.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) =>
+    `<pre><code>${code.trim()}</code></pre>`);
+
+  // Headings
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Bold / italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Horizontal rule
+  html = html.replace(/^[-*]{3,}$/gm, '<hr>');
+
+  // Unordered lists
+  html = html.replace(/(^[ \t]*[-*+] .+(\n|$))+/gm, match => {
+    const items = match.trim().split('\n').map(li =>
+      `<li>${li.replace(/^[ \t]*[-*+] /, '').trim()}</li>`).join('');
+    return `<ul>${items}</ul>`;
+  });
+
+  // Ordered lists
+  html = html.replace(/(^[ \t]*\d+\. .+(\n|$))+/gm, match => {
+    const items = match.trim().split('\n').map(li =>
+      `<li>${li.replace(/^[ \t]*\d+\. /, '').trim()}</li>`).join('');
+    return `<ol>${items}</ol>`;
+  });
+
+  // Paragraphs: wrap consecutive non-tag lines
+  html = html.split(/\n{2,}/).map(block => {
+    block = block.trim();
+    if (!block) return '';
+    if (/^<(h[1-6]|ul|ol|pre|hr)/.test(block)) return block;
+    return `<p>${block.replace(/\n/g,'<br>')}</p>`;
+  }).join('\n');
+
+  return html;
+}
+
+// ── Render Chat ────────────────────────────────────────────────────────────
+function renderChat(rec) {
+  const inner = document.getElementById('chat-inner');
+  const utterances = rec.utterances || [];
+
+  if (utterances.length === 0) {
+    inner.innerHTML = '<div id="empty-state" style="padding:60px 0;text-align:center;color:#9ca3af;">No utterances in this record.</div>';
+    return;
+  }
+
+  const agentName = utterances.find(u => u.participant_name !== (rec.scenario?.persona?.name || ''))?.participant_name || '';
+
+  inner.innerHTML = utterances.map(u => {
+    const isUser = u.participant_name === (rec.scenario?.persona?.name || utterances[0].participant_name);
+    const isUserAlt = !agentName || u.participant_name !== agentName;
+    const userClass = isUser ? 'user-msg' : '';
+
+    // Format timestamp
+    const ts = u.timestamp ? new Date(u.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+
+    // Render text
+    const textHtml = u.text ? renderMarkdown(u.text) : '<em>(empty)</em>';
+
+    // Sources
+    const sources = (u.sources || []).filter(s => s);
+    const sourceHtml = sources.length
+      ? sources.map(s => `<span class="pill source">↗ ${escHtml(String(s))}</span>`).join('')
+      : '';
+
+    // Annotations
+    const ann = u.annotations || {};
+    const annHtml = Object.entries(ann).filter(([,v]) => v !== '' && v !== null && v !== undefined).map(([k,v]) => {
+      const isHelpful = k === 'helpful' && v === true;
+      return `<span class="pill annotation ${isHelpful?'helpful':''}">${escHtml(k)}: ${escHtml(String(v))}</span>`;
+    }).join('');
+
+    const pillsHtml = (sourceHtml || annHtml)
+      ? `<div class="meta-pills">${sourceHtml}${annHtml}</div>` : '';
+
+    return `
+      <div class="utterance ${userClass}">
+        <div class="msg-header">
+          <span class="participant-tag">${escHtml(u.participant_name)}</span>
+          <span class="timestamp">${ts}</span>
+        </div>
+        <div class="bubble">${textHtml}</div>
+        ${pillsHtml}
+      </div>`;
+  }).join('');
+}
+
+// ── Render Sidebar ─────────────────────────────────────────────────────────
+function renderSidebar(rec) {
+  const scroll = document.getElementById('sidebar-scroll');
+
+  const sections = [];
+
+  // Record info
+  sections.push(sidebarSection('Record', true, `
+    ${metaRow('Record ID', `<span class="meta-value mono">${escHtml(rec.record_id || '—')}</span>`)}
+    ${metaRow('User ID', rec.user_id ?? '—')}
+    ${metaRow('Scenario ID', rec.scenario_id ?? '—')}
+    ${metaRow('Session ID', `<span class="meta-value mono" style="font-size:10px">${escHtml(rec.session_id || '—')}</span>`)}
+  `));
+
+  // Scenario - Persona
+  const persona = rec.scenario?.persona;
+  if (persona) {
+    const gi = persona.general_info || {};
+    const ai = persona.experience_with_ai || {};
+    const it = persona.individual_traits || {};
+    sections.push(sidebarSection('Persona', false, `
+      ${metaRow('Name', `<span class="meta-value tag">${escHtml(persona.name||'—')}</span>`)}
+      ${gi.gender ? metaRow('Gender', gi.gender) : ''}
+      ${gi.age ? metaRow('Age', gi.age) : ''}
+      ${gi.highest_education ? metaRow('Education', gi.highest_education) : ''}
+      ${gi.proficiency_in_english ? metaRow('English', gi.proficiency_in_english) : ''}
+      ${gi.tools_used_for_dataset_search ? metaRow('Search Tools', (gi.tools_used_for_dataset_search||[]).join(', ')) : ''}
+      ${ai.trust ? metaRow('AI Trust', ai.trust) : ''}
+      ${ai.perceived_human_likeness ? metaRow('Anthropomorphism', ai.perceived_human_likeness) : ''}
+      ${it.frustration_threshold ? metaRow('Frustration', it.frustration_threshold) : ''}
+      ${it.interaction_style ? metaRow('Style', it.interaction_style) : ''}
+    `));
+  }
+
+  // Scenario - Goal
+  const goal = rec.scenario?.goal;
+  if (goal) {
+    sections.push(sidebarSection('Goal', false, `
+      ${goal.type ? metaRow('Type', `<span class="meta-value tag">${escHtml(goal.type)}</span>`) : ''}
+      ${goal.discipline ? metaRow('Discipline', goal.discipline) : ''}
+      ${goal.stage ? metaRow('Stage', goal.stage) : ''}
+      ${goal.topic ? metaRow('Topic', `<span class="meta-value" style="font-size:12px;opacity:0.85">${escHtml(goal.topic)}</span>`) : ''}
+      ${goal.context ? metaRow('Context', `<span class="meta-value" style="font-size:12px;opacity:0.85">${escHtml(goal.context)}</span>`) : ''}
+      ${goal.know_datasets ? metaRow('Knows Datasets', goal.know_datasets) : ''}
+      ${goal.dataset_examples ? metaRow('Examples', `<span class="meta-value" style="font-size:11px;font-family:var(--mono);opacity:0.75;word-break:break-all">${escHtml(goal.dataset_examples)}</span>`) : ''}
+    `));
+  }
+
+  // Persona–Goal Interaction
+  const pgi = rec.scenario?.persona_goal_interaction;
+  if (pgi) {
+    sections.push(sidebarSection('Persona × Goal', false, `
+      ${pgi.domain_familiarity ? metaRow('Domain Familiarity', pgi.domain_familiarity) : ''}
+      ${pgi.known_datasets ? metaRow('Known Datasets', (pgi.known_datasets||[]).join(', ') || '—') : ''}
+    `));
+  }
+
+  // Post-conversation survey
+  const survey = rec.post_conversation_survey_responses;
+  if (survey) {
+    const entries = Object.entries(survey).filter(([,v]) => v !== '' && v !== null && v !== undefined);
+    if (entries.length) {
+      sections.push(sidebarSection('Post-Conv. Survey', false,
+        entries.map(([k,v]) => {
+          const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+          const val = Array.isArray(v) ? v.join('; ') : String(v);
+          return metaRow(label, `<span class="meta-value" style="font-size:12px;opacity:0.85">${escHtml(val)}</span>`);
+        }).join('')
+      ));
+    }
+  }
+
+  scroll.innerHTML = sections.join('');
+
+  // Toggle listeners
+  scroll.querySelectorAll('.sidebar-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.sidebar-section').classList.toggle('open');
+    });
+  });
+}
+
+function sidebarSection(title, openByDefault, bodyHtml) {
+  return `
+    <div class="sidebar-section ${openByDefault ? 'open' : ''}">
+      <button class="sidebar-toggle">
+        ${escHtml(title)}
+        <span class="toggle-arrow">▼</span>
+      </button>
+      <div class="sidebar-body">${bodyHtml}</div>
+    </div>`;
+}
+
+function metaRow(label, value) {
+  const valHtml = typeof value === 'string' && value.startsWith('<')
+    ? value
+    : `<span class="meta-value">${escHtml(String(value ?? '—'))}</span>`;
+  return `<div class="meta-row"><span class="meta-label">${escHtml(label)}</span>${valHtml}</div>`;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
